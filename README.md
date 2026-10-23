@@ -26,18 +26,22 @@ python -m obfus --help
 ### Light mode
 
 For Terraform files, `terraform plan` output, and GitHub diffs. It works on any text file
-(no extension restriction) and replaces only the quoted values of attributes named `id`/`name`
-or ending in `_id`/`_name` (plus plurals such as `subnet_ids = [...]`), including `-`/`+`/`~`
-diff lines and `"old" -> "new"` changes:
+(no extension restriction) and replaces quoted values of `id` attributes and any attribute key
+containing `name` (including object keys such as `"Name"`). It also obfuscates IPv4/IPv6 addresses,
+CIDRs, and IPv4 subnet masks wherever they appear, including in string values and diff text.
+Diff lines (`-`/`+`/`~`) and `"old" -> "new"` changes are supported:
 
 ```text
 + subnet_id   = "subnet-0abc"      ->  + subnet_id   = "obf_id_1"
 + server_name = "server_name_dev"  ->  + server_name = "obf_name_1"
+  cidr_block  = "10.20.0.0/16"     ->    cidr_block  = "obf_subnet_1"
+  public_ip   = "203.0.113.7"      ->    public_ip   = "obf_ip_1"
 ```
 
-Everything else is untouched: other attributes, tags, `(known after apply)`, and values with
-`${...}` interpolation. Identical values share a placeholder, and `light restore` reverses it using
-the mapping (plain or encrypted, per `.obfusconfig.json`). `--keys arn,key` replaces the suffix list.
+Other attributes and values with `${...}` interpolation remain untouched. Identical values share a
+placeholder, and `light restore` reverses it using the mapping (plain or encrypted, per
+`.obfusconfig.json`). `--keys arn,key` sets the attribute suffix list; name-key and IP matching
+remain enabled.
 
 Supports `.js`, `.py`, `.tf`. Optional `.obfusconfig.json` (cwd) enables encrypted
 mappings (AES-256-GCM); see the top-level README. Encrypted mappings are
