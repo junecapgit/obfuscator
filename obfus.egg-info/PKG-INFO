@@ -1,0 +1,56 @@
+Metadata-Version: 2.4
+Name: obfus
+Version: 0.1.0
+Summary: Local-first code obfuscator with deterministic restore (Python port)
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: cryptography>=41
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+
+# obfus (Python port)
+
+Python implementation of the local-first code obfuscator. Same CLI, behavior and
+mapping/encryption formats as the Go version in the repository root (`..`).
+
+## Install
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+```
+
+## Usage
+
+```powershell
+obfus input.js -o safe.js --map map.json
+obfus restore safe.js -o restored.js --map map.json
+obfus ai input.py -o ai_safe.py
+# or without installing the script:
+python -m obfus --help
+```
+
+Supports `.js`, `.py`, `.tf`. Optional `.obfusconfig.json` (cwd) enables encrypted
+mappings (AES-256-GCM); see the top-level README. Encrypted mappings are
+interchangeable with the Go version.
+
+## Tests
+
+```powershell
+pytest
+```
+
+## Layout
+
+| Module | Go equivalent |
+|---|---|
+| `obfus/cli.py` | `cmd/obfus` |
+| `obfus/tokenizer/` | `core/tokenizer` |
+| `obfus/mapping.py` | `core/mapping` |
+| `obfus/transform.py` | `core/transform` |
+| `obfus/storage.py` | `core/storage` |
+| `obfus/security.py` | `core/security` |
+| `obfus/config.py` | `core/config` |
+
+Files are read/written byte-faithfully (UTF-8 + `surrogateescape`, no newline translation).
