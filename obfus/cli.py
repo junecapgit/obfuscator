@@ -9,16 +9,16 @@ from typing import Sequence, TextIO
 
 from obfus import config as config_mod
 from obfus import mapping as mapping_mod
-from obfus import light, storage, transform
+from obfus import light, service, storage, transform
 from obfus.fileio import read_text, write_text
 from obfus.tokenizer import for_file, reconstruct
 
 USAGE = """usage:
-  obfus <input.{js|py|tf}> -o <safe-file> --map <map.json>
-  obfus restore <safe-file.{js|py|tf}> -o <output-file> --map <map.json>
-  obfus ai <input.{js|py|tf}> -o <ai-safe-file>
-  obfus light <input> -o <safe-file> --map <map.json> [--keys id,name]
-  obfus light restore <safe-file> -o <output-file> --map <map.json>
+  obfus <input-file-or-dir> [-o <safe-path>] [--map <map.json>]
+  obfus restore <safe-file-or-dir> [-o <output-path>] [--map <map.json>]
+  obfus ai <input-file-or-dir> [-o <ai-safe-path>]
+  obfus light <input-file-or-dir> [-o <safe-path>] [--map <map.json>] [--keys id,name]
+  obfus light restore <safe-file-or-dir> [-o <output-path>] [--map <map.json>]
 """
 
 
@@ -62,8 +62,21 @@ def run(args: list[str], stdout: TextIO, stderr: TextIO) -> int:
 
 def _run_obfuscate(args: list[str], cfg: config_mod.Config) -> None:
     input_path, output_path, map_path = _parse_cli_args(args)
-    _require(output_path, map_path)
+    if os.path.isdir(input_path):
+        out_dir = output_path or "output"
+        if not map_path:
+            ext = ".enc" if cfg.encryption.enabled else ".json"
+            map_path = str(Path(out_dir) / f"map{ext}")
+        service.obfuscate_folder(
+            input_path,
+            output_dir=out_dir,
+            map_path=map_path,
+            mode="full",
+            cfg=cfg,
+        )
+        return
 
+    _require(output_path, map_path)
     source = _read_input(input_path)
     tokenize = for_file(input_path)
     tokens = tokenize(source)
@@ -79,8 +92,18 @@ def _run_obfuscate(args: list[str], cfg: config_mod.Config) -> None:
 
 def _run_restore(args: list[str], cfg: config_mod.Config) -> None:
     input_path, output_path, map_path = _parse_cli_args(args)
-    _require(output_path, map_path)
+    if os.path.isdir(input_path):
+        out_dir = output_path or "restored"
+        service.restore_folder(
+            input_path,
+            output_dir=out_dir,
+            map_path=map_path or None,
+            mode="full",
+            cfg=cfg,
+        )
+        return
 
+    _require(output_path, map_path)
     source = _read_input(input_path)
     if cfg.encryption.enabled:
         m = storage.load_mapping_encrypted(map_path, _password(cfg))
@@ -93,8 +116,12 @@ def _run_restore(args: list[str], cfg: config_mod.Config) -> None:
 
 def _run_ai(args: list[str]) -> None:
     input_path, output_path, _ = _parse_cli_args(args)
-    _require(output_path)
+    if os.path.isdir(input_path):
+        out_dir = output_path or "output"
+        service.ai_safe_folder(input_path, output_dir=out_dir)
+        return
 
+    _require(output_path)
     source = _read_input(input_path)
     tokens = for_file(input_path)(source)
     write_text(output_path, reconstruct(transform.ai_safe_tokens(tokens)))
@@ -121,6 +148,31 @@ def _run_light(args: list[str], cfg: config_mod.Config) -> None:
         i += 1
 
     input_path, output_path, map_path = _parse_cli_args(rest)
+    if os.path.isdir(input_path):
+        if restoring:
+            out_dir = output_path or "restored"
+            service.restore_folder(
+                input_path,
+                output_dir=out_dir,
+                map_path=map_path or None,
+                mode="light",
+                cfg=cfg,
+            )
+        else:
+            out_dir = output_path or "output"
+            if not map_path:
+                ext = ".enc" if cfg.encryption.enabled else ".json"
+                map_path = str(Path(out_dir) / f"map{ext}")
+            service.obfuscate_folder(
+                input_path,
+                output_dir=out_dir,
+                map_path=map_path,
+                mode="light",
+                keys=keys_spec,
+                cfg=cfg,
+            )
+        return
+
     _require(output_path, map_path)
     text = _read_input(input_path)
 
@@ -155,11 +207,7 @@ def _read_input(path: str) -> str:
 
 
 def _password(cfg: config_mod.Config) -> str:
-    env_name = cfg.encryption.password_env
-    password = os.environ.get(env_name, "")
-    if not password:
-        raise ValueError(f"encryption enabled but password env {env_name!r} is empty")
-    return password
+    return service._resolve_password(cfg)
 
 
 def _parse_cli_args(args: Sequence[str]) -> tuple[str, str, str]:

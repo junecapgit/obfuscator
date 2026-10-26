@@ -73,3 +73,20 @@ def test_for_file_is_case_insensitive_and_rejects_unknown():
     assert for_file("A.JS") is tokenize_javascript
     with pytest.raises(ValueError, match="unsupported file extension"):
         for_file("file.rb")
+
+
+def test_for_file_supports_tfvars_and_related_files():
+    tfvars_source = 'environment = "staging"\ncount = 3\nenabled = true\n'
+    assert reconstruct(for_file("terraform.tfvars")(tfvars_source)) == tfvars_source
+    assert reconstruct(for_file("prod.auto.tfvars")(tfvars_source)) == tfvars_source
+
+    hcl_source = 'terragrunt = { source = "git::..." }\n'
+    assert reconstruct(for_file("terragrunt.hcl")(hcl_source)) == hcl_source
+    assert reconstruct(for_file(".terraform.lock.hcl")(hcl_source)) == hcl_source
+
+    backend_source = 'bucket = "tf-state-bucket"\nkey = "prod.tfstate"\n'
+    assert reconstruct(for_file("backend.tfbackend")(backend_source)) == backend_source
+
+    assert reconstruct(for_file("config.tf.json")('{"key": "val"}')) == '{"key": "val"}'
+    assert reconstruct(for_file("prod.tfvars.json")('{"key": "val"}')) == '{"key": "val"}'
+    assert reconstruct(for_file(".terraformrc")('credentials "app.terraform.io" {}')) == 'credentials "app.terraform.io" {}'

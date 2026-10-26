@@ -1,6 +1,6 @@
 """Lightweight, lossless tokenizers for JavaScript, Python and Terraform."""
 
-from obfus.tokenizer.dispatch import for_file
+from obfus.tokenizer.dispatch import for_file, is_supported_file
 from obfus.tokenizer.js import tokenize_javascript
 from obfus.tokenizer.py import tokenize_python
 from obfus.tokenizer.tf import tokenize_terraform
@@ -11,6 +11,7 @@ __all__ = [
     "TokenType",
     "reconstruct",
     "for_file",
+    "is_supported_file",
     "tokenize_javascript",
     "tokenize_python",
     "tokenize_terraform",

@@ -41,21 +41,27 @@ def parse_keys(spec: str | None) -> tuple[str, ...]:
     return keys
 
 
-def obfuscate(text: str, keys: Iterable[str] = DEFAULT_KEYS) -> tuple[str, Mapping]:
+def obfuscate(
+    text: str,
+    keys: Iterable[str] = DEFAULT_KEYS,
+    mapping: Mapping | None = None,
+    counters: dict[str, int] | None = None,
+) -> tuple[str, Mapping]:
     keys = tuple(keys)
     alternation = "|".join(re.escape(k) + "s?" for k in keys)
     name_key = r'"[^"\n]*name[^"\n]*"|[\w-]*name[\w-]*'
     suffix_key = rf"(?:[\w-]*_)?(?:{alternation})"
     attr = re.compile(
-        rf"(?P<key>{name_key}|{suffix_key})(?P<eq>\s*=\s*)"
+        rf"(?P<key>{name_key}|{suffix_key})(?P<eq>\s*[=:]\s*)"
         rf"(?P<value>{_VALUE}(?:\s*->\s*{_VALUE})?)",
         re.IGNORECASE,
     )
 
-    m = Mapping()
-    counters: dict[str, int] = {}
-    # Placeholders already present in the input must never be reused.
-    taken = set(_PLACEHOLDER.findall(text))
+    m = Mapping() if mapping is None else mapping
+    if counters is None:
+        counters = {}
+    # Placeholders already present in the input or mapping must never be reused.
+    taken = set(_PLACEHOLDER.findall(text)) | set(m.reverse.keys())
 
     def placeholder_for(value: str, category: str) -> str:
         if value in m.forward:
@@ -67,6 +73,7 @@ def obfuscate(text: str, keys: Iterable[str] = DEFAULT_KEYS) -> tuple[str, Mappi
             if candidate not in taken:
                 break
         counters[category] = index
+        taken.add(candidate)
         m.forward[value] = candidate
         m.reverse[candidate] = value
         return candidate

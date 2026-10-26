@@ -11,7 +11,30 @@ from obfus.tokenizer.helpers import (
 from obfus.tokenizer.token import Token, TokenType
 
 TF_KEYWORDS = frozenset(
-    {"resource", "module", "variable", "output", "locals", "provider", "data", "terraform"}
+    {
+        "resource",
+        "module",
+        "variable",
+        "output",
+        "locals",
+        "provider",
+        "data",
+        "terraform",
+        "check",
+        "import",
+        "moved",
+        "run",
+        "assert",
+        "var",
+        "local",
+        "count",
+        "each",
+        "self",
+        "path",
+        "true",
+        "false",
+        "null",
+    }
 )
 
 

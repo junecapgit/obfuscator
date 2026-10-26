@@ -15,8 +15,8 @@ class Mapping:
     reverse: dict[str, str] = field(default_factory=dict)
 
 
-def generate(tokens: Iterable[Token]) -> Mapping:
-    result = Mapping()
+def generate(tokens: Iterable[Token], current: Mapping | None = None) -> Mapping:
+    result = Mapping() if current is None else current
     identifier_index = 1
     string_index = 1
 

@@ -131,3 +131,83 @@ def test_argument_errors(tmp_path, args, message):
     (tmp_path / "input.rb").write_text("a = 1")
     code, _, err = invoke(*args)
     assert code == 1 and message in err
+
+
+def test_cli_folder_default_output(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    proj = tmp_path / "my_project"
+    proj.mkdir()
+    (proj / "main.tf").write_text('variable "token" { default = "secret_val" }\n')
+    (proj / "terraform.tfvars").write_text('token = "secret_val"\n')
+
+    # Invoke on folder without -o and without --map
+    code, out, err = invoke("my_project")
+    assert code == 0 and not err
+
+    output_dir = tmp_path / "output"
+    assert (output_dir / "main.tf").is_file()
+    assert (output_dir / "terraform.tfvars").is_file()
+    assert (output_dir / "map.json").is_file()
+
+    assert "secret_val" not in (output_dir / "main.tf").read_text()
+    assert "secret_val" not in (output_dir / "terraform.tfvars").read_text()
+
+
+def test_cli_folder_specified_output_and_restore(tmp_path):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "app.py").write_text('user_name = "alice"\n')
+    (proj / "sub").mkdir()
+    (proj / "sub" / "lib.py").write_text('user_name = "alice"\n')
+
+    code, out, err = invoke(str(proj), "-o", str(tmp_path / "custom_out"), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+
+    custom_out = tmp_path / "custom_out"
+    assert (custom_out / "app.py").is_file()
+    assert (custom_out / "sub" / "lib.py").is_file()
+    assert "alice" not in (custom_out / "app.py").read_text()
+
+    # Restore folder
+    code, out, err = invoke("restore", str(custom_out), "-o", str(tmp_path / "restored"), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+    assert (tmp_path / "restored" / "app.py").read_text() == 'user_name = "alice"\n'
+    assert (tmp_path / "restored" / "sub" / "lib.py").read_text() == 'user_name = "alice"\n'
+
+
+def test_cli_light_folder(tmp_path):
+    proj = tmp_path / "light_proj"
+    proj.mkdir()
+    (proj / "infra.tf").write_text('subnet_id = "subnet-1234"\n')
+    (proj / "vars.tfvars").write_text('server_name = "prod-app"\n')
+
+    code, out, err = invoke("light", str(proj), "-o", str(tmp_path / "light_out"), "--map", str(tmp_path / "lmap.json"))
+    assert code == 0 and not err
+
+    light_out = tmp_path / "light_out"
+    assert "subnet-1234" not in (light_out / "infra.tf").read_text()
+    assert "prod-app" not in (light_out / "vars.tfvars").read_text()
+
+    # Restore light folder
+    code, out, err = invoke("light", "restore", str(light_out), "-o", str(tmp_path / "light_restored"), "--map", str(tmp_path / "lmap.json"))
+    assert code == 0 and not err
+    assert (tmp_path / "light_restored" / "infra.tf").read_text() == 'subnet_id = "subnet-1234"\n'
+    assert (tmp_path / "light_restored" / "vars.tfvars").read_text() == 'server_name = "prod-app"\n'
+
+
+def test_cli_folder_respects_gitignore(tmp_path):
+    proj = tmp_path / "git_proj"
+    proj.mkdir()
+    (proj / ".gitignore").write_text("*.secret\nignore_me/\n")
+    (proj / "main.tf").write_text('variable "x" {}\n')
+    (proj / "dev.secret").write_text('secret = 1\n')
+    (proj / "ignore_me").mkdir()
+    (proj / "ignore_me" / "test.tf").write_text('variable "y" {}\n')
+
+    out_dir = tmp_path / "git_out"
+    code, out, err = invoke(str(proj), "-o", str(out_dir), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+
+    assert (out_dir / "main.tf").is_file()
+    assert not (out_dir / "dev.secret").exists()
+    assert not (out_dir / "ignore_me").exists()
