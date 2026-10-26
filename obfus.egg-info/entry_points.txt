@@ -1,2 +1,0 @@
-[console_scripts]
-obfus = obfus.cli:main
