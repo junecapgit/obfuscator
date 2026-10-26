@@ -18,6 +18,8 @@ class EncryptionConfig:
 @dataclass
 class Config:
     encryption: EncryptionConfig = field(default_factory=EncryptionConfig)
+    target_dir: str | None = None
+    input_dir: str | None = None
 
 
 def default() -> Config:
@@ -50,6 +52,22 @@ def load(path: str | Path) -> Config:
                 if not isinstance(enc["passwordEnv"], str):
                     raise ValueError("parse config: 'encryption.passwordEnv' must be a string")
                 cfg.encryption.password_env = enc["passwordEnv"]
+
+        for key in ("targetDir", "target_dir", "outputDir", "output_dir"):
+            if key in raw:
+                val = raw[key]
+                if val is not None and not isinstance(val, str):
+                    raise ValueError(f"parse config: {key!r} must be a string")
+                cfg.target_dir = val
+                break
+
+        for key in ("inputDir", "input_dir", "sourceDir", "source_dir"):
+            if key in raw:
+                val = raw[key]
+                if val is not None and not isinstance(val, str):
+                    raise ValueError(f"parse config: {key!r} must be a string")
+                cfg.input_dir = val
+                break
 
     _validate(cfg)
     return cfg

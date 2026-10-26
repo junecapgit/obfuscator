@@ -44,7 +44,8 @@ def obfuscate_folder(
 
     Args:
         input_dir: Directory containing files to obfuscate.
-        output_dir: Destination directory. Defaults to ``./output`` in the current working directory.
+        output_dir: Destination directory. Defaults to ``cfg.target_dir`` if configured,
+            or ``./output`` in the current working directory.
         map_path: Path to write the mapping file. Defaults to ``map.json`` (or ``map.enc``) inside output_dir.
         mode: Obfuscation mode - "full" (tokenizer-based) or "light" (attribute/diff/IP-based).
         keys: Attribute suffixes for light mode (e.g. "id,name").
@@ -60,7 +61,10 @@ def obfuscate_folder(
         raise ValueError(f"input directory does not exist or is not a directory: {input_dir}")
 
     if output_dir is None:
-        out_dir = (Path.cwd() / "output").resolve()
+        if cfg and cfg.target_dir:
+            out_dir = Path(cfg.target_dir).resolve()
+        else:
+            out_dir = (Path.cwd() / "output").resolve()
     else:
         out_dir = Path(output_dir).resolve()
 
@@ -181,7 +185,10 @@ def restore_folder(
         m = storage.load_mapping(str(resolved_map_path))
 
     if output_dir is None:
-        out_dir = (Path.cwd() / "restored").resolve()
+        if cfg and cfg.target_dir:
+            out_dir = Path(cfg.target_dir).resolve()
+        else:
+            out_dir = (Path.cwd() / "restored").resolve()
     else:
         out_dir = Path(output_dir).resolve()
 
@@ -231,6 +238,7 @@ def restore_folder(
 def ai_safe_folder(
     input_dir: str | Path,
     output_dir: str | Path | None = None,
+    cfg: config_mod.Config | None = None,
     copy_unsupported: bool = True,
 ) -> Path:
     """Create an AI-safe redacted copy of an entire directory."""
@@ -239,7 +247,10 @@ def ai_safe_folder(
         raise ValueError(f"input directory does not exist or is not a directory: {input_dir}")
 
     if output_dir is None:
-        out_dir = (Path.cwd() / "output").resolve()
+        if cfg and cfg.target_dir:
+            out_dir = Path(cfg.target_dir).resolve()
+        else:
+            out_dir = (Path.cwd() / "output").resolve()
     else:
         out_dir = Path(output_dir).resolve()
 
@@ -289,15 +300,18 @@ class ObfuscatorService:
 
     def obfuscate_folder(
         self,
-        input_dir: str | Path,
+        input_dir: str | Path | None = None,
         output_dir: str | Path | None = None,
         map_path: str | Path | None = None,
         mode: str = "full",
         keys: str | Iterable[str] | None = None,
         copy_unsupported: bool = True,
     ) -> tuple[Path, mapping_mod.Mapping]:
+        effective_in = input_dir or (self.cfg.input_dir if self.cfg else None)
+        if not effective_in:
+            raise ValueError("missing required input_dir")
         return obfuscate_folder(
-            input_dir,
+            effective_in,
             output_dir=output_dir,
             map_path=map_path,
             mode=mode,
@@ -309,14 +323,17 @@ class ObfuscatorService:
 
     def restore_folder(
         self,
-        input_dir: str | Path,
+        input_dir: str | Path | None = None,
         output_dir: str | Path | None = None,
         map_path: str | Path | None = None,
         mode: str = "full",
         copy_unsupported: bool = True,
     ) -> Path:
+        effective_in = input_dir or (self.cfg.input_dir if self.cfg else None)
+        if not effective_in:
+            raise ValueError("missing required input_dir")
         return restore_folder(
-            input_dir,
+            effective_in,
             output_dir=output_dir,
             map_path=map_path,
             mode=mode,
@@ -327,8 +344,16 @@ class ObfuscatorService:
 
     def ai_safe_folder(
         self,
-        input_dir: str | Path,
+        input_dir: str | Path | None = None,
         output_dir: str | Path | None = None,
         copy_unsupported: bool = True,
     ) -> Path:
-        return ai_safe_folder(input_dir, output_dir=output_dir, copy_unsupported=copy_unsupported)
+        effective_in = input_dir or (self.cfg.input_dir if self.cfg else None)
+        if not effective_in:
+            raise ValueError("missing required input_dir")
+        return ai_safe_folder(
+            effective_in,
+            output_dir=output_dir,
+            cfg=self.cfg,
+            copy_unsupported=copy_unsupported,
+        )

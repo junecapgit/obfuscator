@@ -46,7 +46,7 @@ def run(args: list[str], stdout: TextIO, stderr: TextIO) -> int:
     if args[0] == "restore":
         action, handler = "restore", lambda: _run_restore(args[1:], cfg)
     elif args[0] == "ai":
-        action, handler = "ai mode", lambda: _run_ai(args[1:])
+        action, handler = "ai mode", lambda: _run_ai(args[1:], cfg)
     elif args[0] == "light":
         action, handler = "light mode", lambda: _run_light(args[1:], cfg)
     else:
@@ -62,6 +62,11 @@ def run(args: list[str], stdout: TextIO, stderr: TextIO) -> int:
 
 def _run_obfuscate(args: list[str], cfg: config_mod.Config) -> None:
     input_path, output_path, map_path = _parse_cli_args(args)
+    if not input_path and cfg.input_dir:
+        input_path = cfg.input_dir
+    if not output_path and cfg.target_dir:
+        output_path = cfg.target_dir
+
     if os.path.isdir(input_path):
         out_dir = output_path or "output"
         if not map_path:
@@ -92,6 +97,11 @@ def _run_obfuscate(args: list[str], cfg: config_mod.Config) -> None:
 
 def _run_restore(args: list[str], cfg: config_mod.Config) -> None:
     input_path, output_path, map_path = _parse_cli_args(args)
+    if not input_path and cfg.input_dir:
+        input_path = cfg.input_dir
+    if not output_path and cfg.target_dir:
+        output_path = cfg.target_dir
+
     if os.path.isdir(input_path):
         out_dir = output_path or "restored"
         service.restore_folder(
@@ -114,11 +124,16 @@ def _run_restore(args: list[str], cfg: config_mod.Config) -> None:
     write_text(output_path, transform.restore_source(source, tokenize, m))
 
 
-def _run_ai(args: list[str]) -> None:
+def _run_ai(args: list[str], cfg: config_mod.Config) -> None:
     input_path, output_path, _ = _parse_cli_args(args)
+    if not input_path and cfg.input_dir:
+        input_path = cfg.input_dir
+    if not output_path and cfg.target_dir:
+        output_path = cfg.target_dir
+
     if os.path.isdir(input_path):
         out_dir = output_path or "output"
-        service.ai_safe_folder(input_path, output_dir=out_dir)
+        service.ai_safe_folder(input_path, output_dir=out_dir, cfg=cfg)
         return
 
     _require(output_path)
@@ -148,6 +163,11 @@ def _run_light(args: list[str], cfg: config_mod.Config) -> None:
         i += 1
 
     input_path, output_path, map_path = _parse_cli_args(rest)
+    if not input_path and cfg.input_dir:
+        input_path = cfg.input_dir
+    if not output_path and cfg.target_dir:
+        output_path = cfg.target_dir
+
     if os.path.isdir(input_path):
         if restoring:
             out_dir = output_path or "restored"
@@ -215,11 +235,14 @@ def _parse_cli_args(args: Sequence[str]) -> tuple[str, str, str]:
     i = 0
     while i < len(args):
         arg = args[i]
-        if arg == "-o":
+        if arg in ("-o", "--output", "--target-dir", "--target"):
             i += 1
             if i >= len(args):
-                raise ValueError("missing value for -o")
+                flag = "-o" if arg == "-o" else arg
+                raise ValueError(f"missing value for {flag}")
             output_path = args[i]
+        elif arg.startswith(("-o=", "--output=", "--target-dir=", "--target=")):
+            output_path = arg.split("=", 1)[1]
         elif arg == "--map":
             i += 1
             if i >= len(args):

@@ -29,3 +29,11 @@ def test_load_malformed_json_fails(tmp_path):
     path.write_text("{nope")
     with pytest.raises(ValueError, match="parse config"):
         load(path)
+
+
+def test_load_target_and_input_dir(tmp_path):
+    path = tmp_path / ".obfusconfig.json"
+    path.write_text('{"targetDir":"./dist_custom","inputDir":"./src_custom"}')
+    cfg = load(path)
+    assert cfg.target_dir == "./dist_custom"
+    assert cfg.input_dir == "./src_custom"

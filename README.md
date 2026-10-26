@@ -114,6 +114,25 @@ Supports `.js`, `.py`, `.tf`, `.tfvars`, `.hcl`, etc. Optional `.obfusconfig.jso
 mappings (AES-256-GCM); see the top-level README. Encrypted mappings are
 interchangeable with the Go version.
 
+## Configuration
+
+Optional `.obfusconfig.json` in your current working directory allows configuring default directories and encryption settings:
+
+```json
+{
+  "targetDir": "./safe-infra",
+  "inputDir": "./my-infra",
+  "encryption": {
+    "enabled": false,
+    "passwordEnv": "OBFUS_PASSWORD"
+  }
+}
+```
+
+- **`targetDir`** (or `outputDir`): Default target directory where duplicate obfuscated structures are placed when not passed on the CLI.
+- **`inputDir`**: Default input directory to process if omitted from CLI arguments.
+- **`encryption`**: Enables AES-256-GCM encrypted mappings (see root README for details).
+
 ## Tests
 
 ```powershell

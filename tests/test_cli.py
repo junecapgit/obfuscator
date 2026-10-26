@@ -211,3 +211,21 @@ def test_cli_folder_respects_gitignore(tmp_path):
     assert (out_dir / "main.tf").is_file()
     assert not (out_dir / "dev.secret").exists()
     assert not (out_dir / "ignore_me").exists()
+
+
+def test_cli_flags_target_dir_and_config(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    proj = tmp_path / "in_proj"
+    proj.mkdir()
+    (proj / "main.tf").write_text('variable "a" {}\n')
+
+    # Test --target-dir flag
+    code, out, err = invoke(str(proj), "--target-dir", str(tmp_path / "custom_tgt"), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+    assert (tmp_path / "custom_tgt" / "main.tf").is_file()
+
+    # Test config targetDir fallback
+    (tmp_path / ".obfusconfig.json").write_text('{"targetDir":"config_target"}')
+    code, out, err = invoke(str(proj))
+    assert code == 0 and not err
+    assert (tmp_path / "config_target" / "main.tf").is_file()
