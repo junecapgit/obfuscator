@@ -8,16 +8,15 @@ from pathlib import Path
 from typing import Sequence, TextIO
 
 from obfus import config as config_mod
-from obfus import mapping as mapping_mod
-from obfus import light, service, storage, transform
+from obfus import light, mapping as mapping_mod, patterns as patterns_mod, service, storage, transform
 from obfus.fileio import read_text, write_text
 from obfus.tokenizer import for_file, reconstruct
 
 USAGE = """usage:
-  obfus <input-file-or-dir> [-o <safe-path>] [--map <map.json>]
+  obfus <input-file-or-dir> [-o <safe-path>] [--map <map.json>] [--patterns <pat-or-file>]
   obfus restore <safe-file-or-dir> [-o <output-path>] [--map <map.json>]
-  obfus ai <input-file-or-dir> [-o <ai-safe-path>]
-  obfus light <input-file-or-dir> [-o <safe-path>] [--map <map.json>] [--keys id,name]
+  obfus ai <input-file-or-dir> [-o <ai-safe-path>] [--patterns <pat-or-file>]
+  obfus light <input-file-or-dir> [-o <safe-path>] [--map <map.json>] [--keys id,name] [--patterns <pat-or-file>]
   obfus light restore <safe-file-or-dir> [-o <output-path>] [--map <map.json>]
 """
 
@@ -37,8 +36,26 @@ def run(args: list[str], stdout: TextIO, stderr: TextIO) -> int:
         stdout.write(USAGE)
         return 0
 
+    # Check for explicit --config flag in arguments
+    config_override: str | None = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--config":
+            if i + 1 >= len(args):
+                stderr.write("config load failed: missing value for --config\n")
+                return 1
+            config_override = args[i + 1]
+            break
+        elif args[i].startswith("--config="):
+            config_override = args[i][len("--config=") :]
+            break
+        i += 1
+
     try:
-        cfg = config_mod.load_optional(config_mod.resolve_config_path(Path.cwd()))
+        if config_override:
+            cfg = config_mod.load(config_override)
+        else:
+            cfg = config_mod.load_optional(config_mod.resolve_config_path(Path.cwd()))
     except (OSError, ValueError) as exc:
         stderr.write(f"config load failed: {exc}\n")
         return 1
@@ -61,7 +78,7 @@ def run(args: list[str], stdout: TextIO, stderr: TextIO) -> int:
 
 
 def _run_obfuscate(args: list[str], cfg: config_mod.Config) -> None:
-    input_path, output_path, map_path = _parse_cli_args(args)
+    input_path, output_path, map_path = _parse_cli_args(args, cfg)
     if not input_path and cfg.input_dir:
         input_path = cfg.input_dir
     if not output_path and cfg.target_dir:
@@ -83,10 +100,17 @@ def _run_obfuscate(args: list[str], cfg: config_mod.Config) -> None:
 
     _require(output_path, map_path)
     source = _read_input(input_path)
+    effective_patterns = cfg.all_patterns()
+    m = mapping_mod.Mapping()
+    counters: dict[str, int] = {}
+
+    if effective_patterns:
+        source, m = patterns_mod.obfuscate_text(source, effective_patterns, mapping=m, counters=counters)
+
     tokenize = for_file(input_path)
     tokens = tokenize(source)
 
-    m = mapping_mod.generate(tokens)
+    m = mapping_mod.generate(tokens, current=m)
     write_text(output_path, reconstruct(transform.obfuscate_tokens(tokens, m)))
 
     if cfg.encryption.enabled:
@@ -96,7 +120,7 @@ def _run_obfuscate(args: list[str], cfg: config_mod.Config) -> None:
 
 
 def _run_restore(args: list[str], cfg: config_mod.Config) -> None:
-    input_path, output_path, map_path = _parse_cli_args(args)
+    input_path, output_path, map_path = _parse_cli_args(args, cfg)
     if not input_path and cfg.input_dir:
         input_path = cfg.input_dir
     if not output_path and cfg.target_dir:
@@ -125,7 +149,7 @@ def _run_restore(args: list[str], cfg: config_mod.Config) -> None:
 
 
 def _run_ai(args: list[str], cfg: config_mod.Config) -> None:
-    input_path, output_path, _ = _parse_cli_args(args)
+    input_path, output_path, _ = _parse_cli_args(args, cfg)
     if not input_path and cfg.input_dir:
         input_path = cfg.input_dir
     if not output_path and cfg.target_dir:
@@ -138,6 +162,9 @@ def _run_ai(args: list[str], cfg: config_mod.Config) -> None:
 
     _require(output_path)
     source = _read_input(input_path)
+    effective_patterns = cfg.all_patterns()
+    if effective_patterns:
+        source = patterns_mod.ai_safe_text(source, effective_patterns)
     tokens = for_file(input_path)(source)
     write_text(output_path, reconstruct(transform.ai_safe_tokens(tokens)))
 
@@ -162,7 +189,7 @@ def _run_light(args: list[str], cfg: config_mod.Config) -> None:
             rest.append(args[i])
         i += 1
 
-    input_path, output_path, map_path = _parse_cli_args(rest)
+    input_path, output_path, map_path = _parse_cli_args(rest, cfg)
     if not input_path and cfg.input_dir:
         input_path = cfg.input_dir
     if not output_path and cfg.target_dir:
@@ -204,7 +231,7 @@ def _run_light(args: list[str], cfg: config_mod.Config) -> None:
         write_text(output_path, light.restore(text, m))
         return
 
-    safe, m = light.obfuscate(text, light.parse_keys(keys_spec))
+    safe, m = light.obfuscate(text, light.parse_keys(keys_spec), patterns=cfg.all_patterns())
     write_text(output_path, safe)
     if cfg.encryption.enabled:
         storage.save_mapping_encrypted(map_path, m, _password(cfg))
@@ -230,7 +257,7 @@ def _password(cfg: config_mod.Config) -> str:
     return service._resolve_password(cfg)
 
 
-def _parse_cli_args(args: Sequence[str]) -> tuple[str, str, str]:
+def _parse_cli_args(args: Sequence[str], cfg: config_mod.Config | None = None) -> tuple[str, str, str]:
     input_path = output_path = map_path = ""
     i = 0
     while i < len(args):
@@ -250,6 +277,33 @@ def _parse_cli_args(args: Sequence[str]) -> tuple[str, str, str]:
             map_path = args[i]
         elif arg.startswith("--map="):
             map_path = arg[len("--map=") :]
+        elif arg in ("--patterns", "--tokens"):
+            i += 1
+            if i >= len(args):
+                raise ValueError(f"missing value for {arg}")
+            val = args[i]
+            _add_pattern_arg(val, cfg)
+        elif arg.startswith(("--patterns=", "--tokens=")):
+            val = arg.split("=", 1)[1]
+            _add_pattern_arg(val, cfg)
+        elif arg in ("--patterns-file", "--tokens-file"):
+            i += 1
+            if i >= len(args):
+                raise ValueError(f"missing value for {arg}")
+            val = args[i]
+            if cfg is not None:
+                cfg.patterns.extend(patterns_mod.load_patterns_file(val))
+        elif arg.startswith(("--patterns-file=", "--tokens-file=")):
+            val = arg.split("=", 1)[1]
+            if cfg is not None:
+                cfg.patterns.extend(patterns_mod.load_patterns_file(val))
+        elif arg == "--config":
+            i += 1
+            if i >= len(args):
+                raise ValueError("missing value for --config")
+            # Already handled earlier
+        elif arg.startswith("--config="):
+            pass
         elif arg.startswith("-"):
             raise ValueError(f"unknown flag {arg!r}")
         else:
@@ -261,6 +315,15 @@ def _parse_cli_args(args: Sequence[str]) -> tuple[str, str, str]:
     if not input_path:
         raise ValueError("expected exactly one input file")
     return input_path, output_path, map_path
+
+
+def _add_pattern_arg(val: str, cfg: config_mod.Config | None) -> None:
+    if cfg is None:
+        return
+    if Path(val).is_file():
+        cfg.patterns.extend(patterns_mod.load_patterns_file(val))
+    else:
+        cfg.patterns.append(val)
 
 
 def _is_help(arg: str) -> bool:

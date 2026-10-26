@@ -17,6 +17,7 @@ import re
 import ipaddress
 from typing import Iterable
 
+from obfus import patterns as patterns_mod
 from obfus.mapping import Mapping
 
 DEFAULT_KEYS = ("id", "name")
@@ -46,7 +47,15 @@ def obfuscate(
     keys: Iterable[str] = DEFAULT_KEYS,
     mapping: Mapping | None = None,
     counters: dict[str, int] | None = None,
+    patterns: Iterable[str] | None = None,
 ) -> tuple[str, Mapping]:
+    m = Mapping() if mapping is None else mapping
+    if counters is None:
+        counters = {}
+
+    if patterns:
+        text, m = patterns_mod.obfuscate_text(text, patterns, mapping=m, counters=counters)
+
     keys = tuple(keys)
     alternation = "|".join(re.escape(k) + "s?" for k in keys)
     name_key = r'"[^"\n]*name[^"\n]*"|[\w-]*name[\w-]*'
@@ -57,9 +66,6 @@ def obfuscate(
         re.IGNORECASE,
     )
 
-    m = Mapping() if mapping is None else mapping
-    if counters is None:
-        counters = {}
     # Placeholders already present in the input or mapping must never be reused.
     taken = set(_PLACEHOLDER.findall(text)) | set(m.reverse.keys())
 
@@ -80,8 +86,8 @@ def obfuscate(
 
     def replace_quoted(match: re.Match[str], category: str) -> str:
         value = match.group(1)
-        # Skip empties and interpolations: they are expressions, not literal values.
-        if not value or "${" in value or "%{" in value:
+        # Skip empties, interpolations, and already assigned placeholders.
+        if not value or "${" in value or "%{" in value or _PLACEHOLDER.fullmatch(value) or value in m.reverse:
             return match.group(0)
         return f'"{placeholder_for(value, category)}"'
 
@@ -108,6 +114,8 @@ def obfuscate(
 
     def replace_ip(match: re.Match[str]) -> str:
         value = match.group(0)
+        if _PLACEHOLDER.fullmatch(value) or value in m.reverse:
+            return value
         try:
             if "/" in value:
                 ipaddress.ip_network(value, strict=False)

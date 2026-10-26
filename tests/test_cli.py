@@ -229,3 +229,63 @@ def test_cli_flags_target_dir_and_config(tmp_path, monkeypatch):
     code, out, err = invoke(str(proj))
     assert code == 0 and not err
     assert (tmp_path / "config_target" / "main.tf").is_file()
+
+
+def test_cli_single_file_with_patterns_config_file(tmp_path):
+    tokens_file = tmp_path / "tokens.json"
+    tokens_file.write_text('["John Smith", "ABC12345", "app-[dev|qa|prod]-\\d{3}"]')
+
+    src = (
+        '# Written by John Smith\n'
+        'app_id = "app-dev-001"\n'
+        'key = "ABC12345"\n'
+    )
+    (tmp_path / "app.py").write_text(src)
+
+    code, out, err = invoke(
+        "app.py",
+        "-o", "safe.py",
+        "--map", "m.json",
+        "--patterns", str(tokens_file),
+    )
+    assert code == 0 and not err
+
+    safe = (tmp_path / "safe.py").read_text()
+    assert "John Smith" not in safe
+    assert "app-dev-001" not in safe
+    assert "ABC12345" not in safe
+
+    # Restore
+    code, out, err = invoke("restore", "safe.py", "-o", "restored.py", "--map", "m.json")
+    assert code == 0 and not err
+    assert (tmp_path / "restored.py").read_text() == src
+
+
+def test_cli_folder_with_patterns_config_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Put patterns directly in .obfusconfig.json
+    (tmp_path / ".obfusconfig.json").write_text(
+        '{"patterns": ["John Smith", "ABC12345", "app-[dev|qa|prod]-\\d{3}"]}'
+    )
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "app.py").write_text('token = "ABC12345"\n')
+    (proj / "cluster.tf").write_text('name = "app-prod-100"\n')
+    (proj / "README.md").write_text('Lead: John Smith\n')
+
+    code, out, err = invoke(str(proj), "-o", str(tmp_path / "out"), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+
+    out_dir = tmp_path / "out"
+    assert "ABC12345" not in (out_dir / "app.py").read_text()
+    assert "app-prod-100" not in (out_dir / "cluster.tf").read_text()
+    assert "John Smith" not in (out_dir / "README.md").read_text()
+
+    # Restore
+    code, out, err = invoke("restore", str(out_dir), "-o", str(tmp_path / "restored"), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+    assert (tmp_path / "restored" / "app.py").read_text() == 'token = "ABC12345"\n'
+    assert (tmp_path / "restored" / "cluster.tf").read_text() == 'name = "app-prod-100"\n'
+    assert (tmp_path / "restored" / "README.md").read_text() == 'Lead: John Smith\n'
+

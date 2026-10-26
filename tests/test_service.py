@@ -240,3 +240,126 @@ def test_ai_safe_folder(tmp_path):
     assert "secret123" not in content
     assert "comment" not in content
     assert "REDACTED_STR_1" in content
+
+
+def test_obfuscate_folder_with_known_tokens_and_patterns_full_mode(tmp_path):
+    input_dir = tmp_path / "proj_patterns"
+    input_dir.mkdir()
+
+    # Python code with comments, variables and string literals
+    py_content = (
+        "# Contributed by John Smith\n"
+        'ABC12345 = "client_key"\n'
+        'app_host = "app-dev-001"\n'
+        'greeting = "Hello John Smith, deploying app-dev-001"\n'
+    )
+    (input_dir / "service.py").write_text(py_content)
+
+    # Terraform code
+    tf_content = (
+        'resource "aws_instance" "app" {\n'
+        '  server = "app-prod-999"\n'
+        '  creator = "John Smith"\n'
+        '}\n'
+    )
+    (input_dir / "main.tf").write_text(tf_content)
+
+    # Unsupported non-code text file
+    yaml_content = (
+        "service:\n"
+        "  owner: John Smith\n"
+        "  token: ABC12345\n"
+        "  cluster: app-qa-042\n"
+    )
+    (input_dir / "config.yaml").write_text(yaml_content)
+
+    # Binary file
+    (input_dir / "data.bin").write_bytes(b"\x00\xff\xfe\x01\x02")
+
+    output_dir = tmp_path / "out_patterns"
+    map_file = tmp_path / "map_patterns.json"
+
+    patterns = ["John Smith", "ABC12345", r"app-[dev|qa|prod]-\d{3}"]
+
+    out_dir, m = obfuscate_folder(
+        input_dir,
+        output_dir=output_dir,
+        map_path=map_file,
+        mode="full",
+        patterns=patterns,
+    )
+
+    # Verify sensitive tokens are obfuscated in Python
+    safe_py = (output_dir / "service.py").read_text()
+    assert "John Smith" not in safe_py
+    assert "ABC12345" not in safe_py
+    assert "app-dev-001" not in safe_py
+
+    # Verify sensitive tokens are obfuscated in Terraform
+    safe_tf = (output_dir / "main.tf").read_text()
+    assert "John Smith" not in safe_tf
+    assert "app-prod-999" not in safe_tf
+
+    # Verify sensitive tokens are obfuscated in YAML
+    safe_yaml = (output_dir / "config.yaml").read_text()
+    assert "John Smith" not in safe_yaml
+    assert "ABC12345" not in safe_yaml
+    assert "app-qa-042" not in safe_yaml
+
+    # Verify binary file copied unchanged
+    assert (output_dir / "data.bin").read_bytes() == b"\x00\xff\xfe\x01\x02"
+
+    # Restore folder
+    restored_dir = tmp_path / "restored_patterns"
+    restore_folder(
+        output_dir,
+        output_dir=restored_dir,
+        map_path=map_file,
+        mode="full",
+    )
+
+    assert (restored_dir / "service.py").read_text() == py_content
+    assert (restored_dir / "main.tf").read_text() == tf_content
+    assert (restored_dir / "config.yaml").read_text() == yaml_content
+    assert (restored_dir / "data.bin").read_bytes() == b"\x00\xff\xfe\x01\x02"
+
+
+def test_obfuscate_folder_with_patterns_light_mode(tmp_path):
+    input_dir = tmp_path / "proj_light_pats"
+    input_dir.mkdir()
+
+    tf_content = (
+        'server_name = "app-prod-100"\n'
+        'owner = "John Smith"\n'
+        'key = "ABC12345"\n'
+    )
+    (input_dir / "vars.tf").write_text(tf_content)
+
+    output_dir = tmp_path / "out_light_pats"
+    map_file = tmp_path / "lmap.json"
+
+    patterns = ["John Smith", "ABC12345", r"app-[dev|qa|prod]-\d{3}"]
+
+    obfuscate_folder(
+        input_dir,
+        output_dir=output_dir,
+        map_path=map_file,
+        mode="light",
+        patterns=patterns,
+    )
+
+    safe_tf = (output_dir / "vars.tf").read_text()
+    assert "John Smith" not in safe_tf
+    assert "ABC12345" not in safe_tf
+    assert "app-prod-100" not in safe_tf
+
+    restored_dir = tmp_path / "restored_light_pats"
+    restore_folder(
+        output_dir,
+        output_dir=restored_dir,
+        map_path=map_file,
+        mode="light",
+    )
+
+    assert (restored_dir / "vars.tf").read_text() == tf_content
+

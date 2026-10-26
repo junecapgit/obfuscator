@@ -22,12 +22,16 @@ def generate(tokens: Iterable[Token], current: Mapping | None = None) -> Mapping
 
     for token in tokens:
         if token.type is TokenType.IDENTIFIER:
-            if token.raw in result.forward:
+            if token.raw in result.forward or token.raw in result.reverse:
                 continue
             replacement = _next_available_identifier(result, identifier_index)
             identifier_index += 1
         elif token.type is TokenType.STRING:
-            if token.raw in result.forward:
+            if token.raw in result.forward or token.raw in result.reverse:
+                continue
+            quote_start, quote_delim = detect_quote(token.raw)
+            payload = token.raw[quote_start + len(quote_delim) : len(token.raw) - len(quote_delim)] if quote_delim else token.raw
+            if payload in result.reverse:
                 continue
             replacement = _placeholder_string_literal(token.raw, string_index)
             while _has_conflict(result, replacement):

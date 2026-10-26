@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Callable, Iterable
 
+from obfus import patterns as patterns_mod
 from obfus.mapping import Mapping
 from obfus.tokenizer import Token, TokenType, reconstruct
 from obfus.tokenizer.helpers import detect_quote
@@ -22,7 +23,9 @@ def restore_source(
     tokenize: Callable[[str], list[Token]],
     m: Mapping,
 ) -> str:
-    return reconstruct(restore_tokens(tokenize(obfuscated_source), m))
+    tokens = restore_tokens(tokenize(obfuscated_source), m)
+    restored = reconstruct(tokens)
+    return patterns_mod.restore_text(restored, m)
 
 
 def ai_safe_tokens(tokens: Iterable[Token]) -> list[Token]:

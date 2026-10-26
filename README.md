@@ -116,7 +116,7 @@ interchangeable with the Go version.
 
 ## Configuration
 
-Optional `.obfusconfig.json` in your current working directory allows configuring default directories and encryption settings:
+Optional `.obfusconfig.json` in your current working directory allows configuring default directories, encryption settings, and known token strings and regex patterns:
 
 ```json
 {
@@ -125,13 +125,49 @@ Optional `.obfusconfig.json` in your current working directory allows configurin
   "encryption": {
     "enabled": false,
     "passwordEnv": "OBFUS_PASSWORD"
-  }
+  },
+  "tokens": [
+    "John Smith",
+    "ABC12345"
+  ],
+  "patterns": [
+    "app-[dev|qa|prod]-\\d{3}"
+  ],
+  "patternsFile": "tokens.json"
 }
 ```
 
 - **`targetDir`** (or `outputDir`): Default target directory where duplicate obfuscated structures are placed when not passed on the CLI.
 - **`inputDir`**: Default input directory to process if omitted from CLI arguments.
 - **`encryption`**: Enables AES-256-GCM encrypted mappings (see root README for details).
+- **`tokens`** / **`patterns`**: List of literal strings or regex patterns to obfuscate across files, strings, and comments. Supports bracket alternation syntax such as `app-[dev|qa|prod]-\d{3}`.
+- **`patternsFile`** (or `tokensFile`): Path to a standalone configuration file (e.g. `tokens.json`) containing token strings and patterns.
+
+### Known Token Strings & Patterns Config File
+
+You can also use a dedicated config file (e.g. `tokens.json`) containing a list of strings and regex patterns:
+
+```json
+[
+  "John Smith",
+  "ABC12345",
+  "app-[dev|qa|prod]-\\d{3}"
+]
+```
+
+Pass it on the CLI with `--patterns` or `--config`:
+
+```powershell
+obfus ./my-infra -o ./safe-infra --map map.json --patterns tokens.json
+```
+
+Or reference it in `.obfusconfig.json`:
+
+```json
+{
+  "patternsFile": "tokens.json"
+}
+```
 
 ## Tests
 
@@ -145,6 +181,7 @@ pytest
 |---|---|
 | `obfus/service.py` | High-level service API for file and folder obfuscation/restoration |
 | `obfus/gitignore.py` | GitIgnore filtering supporting root and nested `.gitignore` files |
+| `obfus/patterns.py` | Known token strings and regex pattern matching, obfuscation and restore |
 | `obfus/cli.py` | CLI entry point |
 | `obfus/tokenizer/` | Tokenizers for JS, Python, Terraform (`.tf`, `.tfvars`, `.hcl`, `.tfbackend`) |
 | `obfus/light.py` | Light mode attribute/diff/IP-based obfuscation |
