@@ -1,0 +1,24 @@
+# Python environments and bytecode
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Test, lint, and type-check caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Packaging/build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local configuration and sensitive mapping files
+.obfusconfig.json
+map.json
+map.enc
+*.map.json
+*.map.enc
