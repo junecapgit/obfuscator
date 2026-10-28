@@ -80,9 +80,12 @@ def run(args: list[str], stdout: TextIO, stderr: TextIO) -> int:
 def _run_obfuscate(args: list[str], cfg: config_mod.Config) -> None:
     input_path, output_path, map_path = _parse_cli_args(args, cfg)
     if not input_path and cfg.input_dir:
-        input_path = cfg.input_dir
+        input_path = os.path.expanduser(cfg.input_dir)
     if not output_path and cfg.target_dir:
-        output_path = cfg.target_dir
+        output_path = os.path.expanduser(cfg.target_dir)
+
+    if not os.path.exists(input_path):
+        raise ValueError(f"input path does not exist: {input_path}")
 
     if os.path.isdir(input_path):
         out_dir = output_path or "output"
@@ -122,9 +125,12 @@ def _run_obfuscate(args: list[str], cfg: config_mod.Config) -> None:
 def _run_restore(args: list[str], cfg: config_mod.Config) -> None:
     input_path, output_path, map_path = _parse_cli_args(args, cfg)
     if not input_path and cfg.input_dir:
-        input_path = cfg.input_dir
+        input_path = os.path.expanduser(cfg.input_dir)
     if not output_path and cfg.target_dir:
-        output_path = cfg.target_dir
+        output_path = os.path.expanduser(cfg.target_dir)
+
+    if not os.path.exists(input_path):
+        raise ValueError(f"input path does not exist: {input_path}")
 
     if os.path.isdir(input_path):
         out_dir = output_path or "restored"
@@ -151,9 +157,12 @@ def _run_restore(args: list[str], cfg: config_mod.Config) -> None:
 def _run_ai(args: list[str], cfg: config_mod.Config) -> None:
     input_path, output_path, _ = _parse_cli_args(args, cfg)
     if not input_path and cfg.input_dir:
-        input_path = cfg.input_dir
+        input_path = os.path.expanduser(cfg.input_dir)
     if not output_path and cfg.target_dir:
-        output_path = cfg.target_dir
+        output_path = os.path.expanduser(cfg.target_dir)
+
+    if not os.path.exists(input_path):
+        raise ValueError(f"input path does not exist: {input_path}")
 
     if os.path.isdir(input_path):
         out_dir = output_path or "output"
@@ -191,9 +200,12 @@ def _run_light(args: list[str], cfg: config_mod.Config) -> None:
 
     input_path, output_path, map_path = _parse_cli_args(rest, cfg)
     if not input_path and cfg.input_dir:
-        input_path = cfg.input_dir
+        input_path = os.path.expanduser(cfg.input_dir)
     if not output_path and cfg.target_dir:
-        output_path = cfg.target_dir
+        output_path = os.path.expanduser(cfg.target_dir)
+
+    if not os.path.exists(input_path):
+        raise ValueError(f"input path does not exist: {input_path}")
 
     if os.path.isdir(input_path):
         if restoring:
@@ -314,7 +326,11 @@ def _parse_cli_args(args: Sequence[str], cfg: config_mod.Config | None = None) -
 
     if not input_path:
         raise ValueError("expected exactly one input file")
-    return input_path, output_path, map_path
+    return (
+        os.path.expanduser(input_path),
+        os.path.expanduser(output_path) if output_path else "",
+        os.path.expanduser(map_path) if map_path else "",
+    )
 
 
 def _add_pattern_arg(val: str, cfg: config_mod.Config | None) -> None:

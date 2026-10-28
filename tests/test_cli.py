@@ -289,3 +289,28 @@ def test_cli_folder_with_patterns_config_file(tmp_path, monkeypatch):
     assert (tmp_path / "restored" / "cluster.tf").read_text() == 'name = "app-prod-100"\n'
     assert (tmp_path / "restored" / "README.md").read_text() == 'Lead: John Smith\n'
 
+
+def test_cli_expands_tilde_home_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+    target_dir = tmp_path / "my_dir"
+    target_dir.mkdir()
+    (target_dir / "infra.tf").write_text('server_name = "app-prod"\n')
+
+    # Invoke with tilde in quotes "~/my_dir"
+    code, out, err = invoke("light", "~/my_dir", "-o", "~/my_dir_safe")
+    assert code == 0 and not err
+
+    safe_dir = tmp_path / "my_dir_safe"
+    assert safe_dir.is_dir()
+    assert "app-prod" not in (safe_dir / "infra.tf").read_text()
+    assert (safe_dir / "map.json").is_file()
+
+
+def test_cli_missing_input_path_reports_clear_error():
+    code, out, err = invoke("light", "nonexistent_directory_or_file", "-o", "out")
+    assert code != 0
+    assert "input path does not exist" in err
+
+

@@ -59,17 +59,17 @@ def obfuscate_folder(
     Returns:
         tuple of (resolved output_dir, generated Mapping).
     """
-    in_dir = Path(input_dir).resolve()
+    in_dir = Path(os.path.expanduser(str(input_dir))).resolve()
     if not in_dir.is_dir():
         raise ValueError(f"input directory does not exist or is not a directory: {input_dir}")
 
     if output_dir is None:
         if cfg and cfg.target_dir:
-            out_dir = Path(cfg.target_dir).resolve()
+            out_dir = Path(os.path.expanduser(cfg.target_dir)).resolve()
         else:
             out_dir = (Path.cwd() / "output").resolve()
     else:
-        out_dir = Path(output_dir).resolve()
+        out_dir = Path(os.path.expanduser(str(output_dir))).resolve()
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -285,17 +285,17 @@ def ai_safe_folder(
     patterns: Iterable[str] | None = None,
 ) -> Path:
     """Create an AI-safe redacted copy of an entire directory."""
-    in_dir = Path(input_dir).resolve()
+    in_dir = Path(os.path.expanduser(str(input_dir))).resolve()
     if not in_dir.is_dir():
         raise ValueError(f"input directory does not exist or is not a directory: {input_dir}")
 
     if output_dir is None:
         if cfg and cfg.target_dir:
-            out_dir = Path(cfg.target_dir).resolve()
+            out_dir = Path(os.path.expanduser(cfg.target_dir)).resolve()
         else:
             out_dir = (Path.cwd() / "output").resolve()
     else:
-        out_dir = Path(output_dir).resolve()
+        out_dir = Path(os.path.expanduser(str(output_dir))).resolve()
 
     out_dir.mkdir(parents=True, exist_ok=True)
     git_filter = GitIgnoreFilter(in_dir)
