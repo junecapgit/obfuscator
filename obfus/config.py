@@ -28,6 +28,7 @@ class Config:
     patterns: list[str] = field(default_factory=list)
     tokens_file: str | None = None
     patterns_file: str | None = None
+    config_path: str | None = None
 
     def all_patterns(self) -> list[str]:
         """Return combined unique list of all configured tokens and patterns."""
@@ -64,6 +65,7 @@ def load(path: str | Path) -> Config:
             raise ValueError(f"parse config: {exc}") from exc
 
     cfg = default()
+    cfg.config_path = str(path_obj.resolve())
     if raw is not None:
         if isinstance(raw, list):
             for item in raw:
@@ -161,6 +163,7 @@ def load_optional(path: str | Path) -> Config:
                 patterns = load_patterns_file(cand)
                 cfg = default()
                 cfg.patterns.extend(patterns)
+                cfg.config_path = str(cand.resolve())
                 return cfg
             except Exception:
                 pass

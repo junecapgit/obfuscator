@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 from obfus import config as config_mod
 from obfus import light
@@ -41,6 +41,7 @@ def obfuscate_folder(
     password: str | None = None,
     copy_unsupported: bool = True,
     patterns: Iterable[str] | None = None,
+    on_file: Callable[[Path, str], None] | None = None,
 ) -> tuple[Path, mapping_mod.Mapping]:
     """Obfuscate an entire directory, respecting .gitignore and maintaining structure.
 
@@ -55,6 +56,7 @@ def obfuscate_folder(
         password: Password for encrypted mapping (falls back to config env var).
         copy_unsupported: If True, unsupported or binary files are copied into duplicate structure.
         patterns: Known token strings or regex patterns to obfuscate.
+        on_file: Optional callback invoked with (rel_path, action) where action is 'converted' or 'copied'.
 
     Returns:
         tuple of (resolved output_dir, generated Mapping).
@@ -121,6 +123,8 @@ def obfuscate_folder(
             if f_path in tokens_by_file:
                 safe_tokens = transform.obfuscate_tokens(tokens_by_file[f_path], m)
                 write_text(str(dest_path), reconstruct(safe_tokens))
+                if on_file:
+                    on_file(rel_path, "converted")
             elif copy_unsupported:
                 if effective_patterns:
                     try:
@@ -129,10 +133,16 @@ def obfuscate_folder(
                             content, effective_patterns, mapping=m, counters=counters
                         )
                         write_text(str(dest_path), safe_content)
+                        if on_file:
+                            on_file(rel_path, "converted")
                     except (UnicodeDecodeError, ValueError):
                         shutil.copy2(f_path, dest_path)
+                        if on_file:
+                            on_file(rel_path, "copied")
                 else:
                     shutil.copy2(f_path, dest_path)
+                    if on_file:
+                        on_file(rel_path, "copied")
 
     elif normalized_mode == "light":
         parsed_keys = light.parse_keys(keys) if isinstance(keys, str) else (tuple(keys) if keys else light.DEFAULT_KEYS)
@@ -152,6 +162,8 @@ def obfuscate_folder(
                     patterns=effective_patterns,
                 )
                 write_text(str(dest_path), safe)
+                if on_file:
+                    on_file(rel_path, "converted")
             except (UnicodeDecodeError, ValueError):
                 if copy_unsupported:
                     if effective_patterns:
@@ -161,10 +173,16 @@ def obfuscate_folder(
                                 content, effective_patterns, mapping=m, counters=counters
                             )
                             write_text(str(dest_path), safe_content)
+                            if on_file:
+                                on_file(rel_path, "converted")
                         except (UnicodeDecodeError, ValueError):
                             shutil.copy2(f_path, dest_path)
+                            if on_file:
+                                on_file(rel_path, "copied")
                     else:
                         shutil.copy2(f_path, dest_path)
+                        if on_file:
+                            on_file(rel_path, "copied")
     else:
         raise ValueError(f"unknown mode {mode!r}: expected 'full' or 'light'")
 
@@ -192,6 +210,7 @@ def restore_folder(
     cfg: config_mod.Config | None = None,
     password: str | None = None,
     copy_unsupported: bool = True,
+    on_file: Callable[[Path, str], None] | None = None,
 ) -> Path:
     """Restore an obfuscated directory back to its original content using a mapping."""
     in_dir = Path(input_dir).resolve()
@@ -251,26 +270,38 @@ def restore_folder(
                     tok_fn = for_file(str(f_path))
                     restored = transform.restore_source(source, tok_fn, m)
                     write_text(str(dest_path), restored)
+                    if on_file:
+                        on_file(rel_path, "converted")
                 elif copy_unsupported:
                     try:
                         content = read_text(str(f_path))
                         restored_content = patterns_mod.restore_text(content, m)
                         write_text(str(dest_path), restored_content)
+                        if on_file:
+                            on_file(rel_path, "converted")
                     except (UnicodeDecodeError, ValueError):
                         shutil.copy2(f_path, dest_path)
+                        if on_file:
+                            on_file(rel_path, "copied")
             elif normalized_mode == "light":
                 try:
                     source = read_text(str(f_path))
                     restored = light.restore(source, m)
                     write_text(str(dest_path), restored)
+                    if on_file:
+                        on_file(rel_path, "converted")
                 except (UnicodeDecodeError, ValueError):
                     if copy_unsupported:
                         try:
                             content = read_text(str(f_path))
                             restored_content = patterns_mod.restore_text(content, m)
                             write_text(str(dest_path), restored_content)
+                            if on_file:
+                                on_file(rel_path, "converted")
                         except (UnicodeDecodeError, ValueError):
                             shutil.copy2(f_path, dest_path)
+                            if on_file:
+                                on_file(rel_path, "copied")
             else:
                 raise ValueError(f"unknown mode {mode!r}: expected 'full' or 'light'")
 
@@ -283,6 +314,7 @@ def ai_safe_folder(
     cfg: config_mod.Config | None = None,
     copy_unsupported: bool = True,
     patterns: Iterable[str] | None = None,
+    on_file: Callable[[Path, str], None] | None = None,
 ) -> Path:
     """Create an AI-safe redacted copy of an entire directory."""
     in_dir = Path(os.path.expanduser(str(input_dir))).resolve()
@@ -331,16 +363,24 @@ def ai_safe_folder(
                 tokens = tok_fn(source)
                 safe = reconstruct(transform.ai_safe_tokens(tokens))
                 write_text(str(dest_path), safe)
+                if on_file:
+                    on_file(rel_path, "converted")
             elif copy_unsupported:
                 if effective_patterns:
                     try:
                         content = read_text(str(f_path))
                         safe_content = patterns_mod.ai_safe_text(content, effective_patterns)
                         write_text(str(dest_path), safe_content)
+                        if on_file:
+                            on_file(rel_path, "converted")
                     except (UnicodeDecodeError, ValueError):
                         shutil.copy2(f_path, dest_path)
+                        if on_file:
+                            on_file(rel_path, "copied")
                 else:
                     shutil.copy2(f_path, dest_path)
+                    if on_file:
+                        on_file(rel_path, "copied")
 
     return out_dir
 
@@ -367,6 +407,7 @@ class ObfuscatorService:
         keys: str | Iterable[str] | None = None,
         copy_unsupported: bool = True,
         patterns: Iterable[str] | None = None,
+        on_file: Callable[[Path, str], None] | None = None,
     ) -> tuple[Path, mapping_mod.Mapping]:
         effective_in = input_dir or (self.cfg.input_dir if self.cfg else None)
         if not effective_in:
@@ -382,6 +423,7 @@ class ObfuscatorService:
             password=self.password,
             copy_unsupported=copy_unsupported,
             patterns=effective_pats,
+            on_file=on_file,
         )
 
     def restore_folder(
@@ -391,6 +433,7 @@ class ObfuscatorService:
         map_path: str | Path | None = None,
         mode: str = "full",
         copy_unsupported: bool = True,
+        on_file: Callable[[Path, str], None] | None = None,
     ) -> Path:
         effective_in = input_dir or (self.cfg.input_dir if self.cfg else None)
         if not effective_in:
@@ -403,6 +446,7 @@ class ObfuscatorService:
             cfg=self.cfg,
             password=self.password,
             copy_unsupported=copy_unsupported,
+            on_file=on_file,
         )
 
     def ai_safe_folder(
@@ -411,6 +455,7 @@ class ObfuscatorService:
         output_dir: str | Path | None = None,
         copy_unsupported: bool = True,
         patterns: Iterable[str] | None = None,
+        on_file: Callable[[Path, str], None] | None = None,
     ) -> Path:
         effective_in = input_dir or (self.cfg.input_dir if self.cfg else None)
         if not effective_in:
@@ -422,4 +467,5 @@ class ObfuscatorService:
             cfg=self.cfg,
             copy_unsupported=copy_unsupported,
             patterns=effective_pats,
+            on_file=on_file,
         )

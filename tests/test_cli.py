@@ -314,3 +314,132 @@ def test_cli_missing_input_path_reports_clear_error():
     assert "input path does not exist" in err
 
 
+def test_verbose_displays_loaded_obfusconfig_json(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".obfusconfig.json").write_text('{"targetDir":"config_out","tokens":["SECRET_KEY"]}')
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "app.py").write_text('SECRET_KEY = "xyz"\n')
+
+    code, out, err = invoke("-v", str(proj), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+    assert "Loaded .obfusconfig.json" in out
+    assert '"tokens": ["SECRET_KEY"]' in out or "SECRET_KEY" in out
+    assert "Status: converting folder" in out
+    assert "Files converted:" in out
+    assert "app.py" in out
+    assert "Total files converted: 1" in out
+
+
+def test_verbose_without_obfusconfig_json(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "test.js").write_text("const x = 1;\n")
+
+    code, out, err = invoke(str(proj), "-o", str(tmp_path / "out"), "--map", str(tmp_path / "m.json"), "-v")
+    assert code == 0 and not err
+    assert "No .obfusconfig.json loaded" in out
+    assert "Status: converting folder" in out
+    assert "Files converted:" in out
+    assert "test.js" in out
+
+
+def test_verbose_folder_with_subfolders_and_unsupported_files(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "main.tf").write_text('variable "tok" {}\n')
+    (proj / "sub").mkdir()
+    (proj / "sub" / "script.py").write_text('val = "prod"\n')
+    # Unsupported binary/unparsed file
+    (proj / "data.bin").write_bytes(b"\x00\x01\x02\x03\xff")
+
+    code, out, err = invoke("--verbose", str(proj), "-o", str(tmp_path / "out"), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+    assert "Files converted:" in out
+    assert "main.tf" in out
+    assert "sub/script.py" in out
+    assert "Files copied (unsupported):" in out
+    assert "data.bin" in out
+    assert "2 file(s) converted" in out
+    assert "1 file(s) copied" in out
+
+
+def test_verbose_folder_restore(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "main.tf").write_text('variable "tok" {}\n')
+
+    # Obfuscate first quietly
+    invoke(str(proj), "-o", str(tmp_path / "safe"), "--map", str(tmp_path / "m.json"))
+
+    # Restore with -v
+    code, out, err = invoke("restore", "-v", str(tmp_path / "safe"), "-o", str(tmp_path / "restored"), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+    assert "Status: restoring folder" in out
+    assert "Files converted:" in out
+    assert "main.tf" in out
+    assert "Total files converted: 1" in out
+
+
+def test_verbose_folder_light_and_light_restore(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "infra.tf").write_text('subnet_id = "subnet-999"\n')
+
+    # Light obfuscate with -v
+    code, out, err = invoke("light", "-v", str(proj), "-o", str(tmp_path / "safe"), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+    assert "Status: converting folder" in out
+    assert "Files converted:" in out
+    assert "infra.tf" in out
+
+    # Light restore with -v
+    code, out, err = invoke("light", "restore", "-v", str(tmp_path / "safe"), "-o", str(tmp_path / "restored"), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+    assert "Status: restoring folder" in out
+    assert "Files converted:" in out
+    assert "infra.tf" in out
+
+
+def test_verbose_folder_ai(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "app.py").write_text('token = "secret"\n')
+
+    code, out, err = invoke("ai", str(proj), "-o", str(tmp_path / "ai_out"), "-v")
+    assert code == 0 and not err
+    assert "Status: redacting folder" in out
+    assert "Files converted:" in out
+    assert "app.py" in out
+
+
+def test_verbose_single_file_status(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".obfusconfig.json").write_text('{"tokens":["ABC"]}')
+    (tmp_path / "in.js").write_text('const x = "ABC";\n')
+
+    code, out, err = invoke("-v", "in.js", "-o", "out.js", "--map", "m.json")
+    assert code == 0 and not err
+    assert "Loaded .obfusconfig.json" in out
+    assert "Status: converting 'in.js' -> 'out.js'" in out
+    assert "File converted: in.js" in out
+
+
+def test_non_verbose_remains_silent(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".obfusconfig.json").write_text('{"targetDir":"config_out"}')
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "app.py").write_text("x = 1\n")
+
+    code, out, err = invoke(str(proj), "--map", str(tmp_path / "m.json"))
+    assert code == 0 and not err
+    assert out == ""
+
+
+

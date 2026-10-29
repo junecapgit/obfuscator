@@ -47,6 +47,27 @@ obfus light restore ./safe-infra -o ./restored-infra --map map.json
 - **Unified mapping**: When obfuscating a folder, a single shared mapping is maintained across all files so variable names and values remain consistent across files.
 - **Duplicate structure**: Unsupported or non-code files (such as documentation) are copied as-is to preserve the exact directory tree.
 
+### Verbose Mode
+
+Pass `-v` or `--verbose` to display loaded configuration (`.obfusconfig.json`) and progress/status information. When running on a folder, it shows status and a list of converted files:
+
+```powershell
+obfus -v ./my-infra -o ./safe-infra --map map.json
+```
+
+Example output:
+```text
+Loaded .obfusconfig.json from C:\project\.obfusconfig.json:
+{
+  "tokens": ["SECRET_TOKEN"]
+}
+Status: converting folder './my-infra' -> './safe-infra'
+Files converted:
+  - main.tf
+  - sub/app.py
+Total files converted: 2
+```
+
 ### Python Service API
 
 You can also call the obfuscation service directly from Python code:
